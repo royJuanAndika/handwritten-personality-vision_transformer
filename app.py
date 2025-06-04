@@ -1,10 +1,11 @@
 import streamlit as st
-import tensorflow as tf
-from transformers import TFViTForImageClassification, ViTImageProcessor
 import numpy as np
 from PIL import Image
-import os
-import glob
+import random
+import time
+# Add these imports for the real model
+from transformers import ViTImageProcessor, TFViTForImageClassification
+import tensorflow as tf
 
 # Page configuration
 st.set_page_config(
@@ -15,49 +16,78 @@ st.set_page_config(
 
 @st.cache_resource
 def load_model():
-    """Load the trained ViT model"""
-    # Find the latest saved model
-    model_dirs = glob.glob("trained_vit_model_perfect/personality_vit_*")
-    if not model_dirs:
-        st.error("No trained model found! Please run the training notebook first.")
-        return None
-    
-    latest_model_dir = max(model_dirs)
-    
+    """Load the trained ViT model (REAL VERSION)"""
     try:
-        model = TFViTForImageClassification.from_pretrained(latest_model_dir)
-        processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224")
-        return model, processor
+        with st.spinner("Loading AI model... This may take a moment."):
+            MODEL_NAME = "google/vit-base-patch16-224"
+            processor = ViTImageProcessor.from_pretrained(MODEL_NAME)
+            model = TFViTForImageClassification.from_pretrained("personality_vit_20250521-144334")
+            return model, processor
     except Exception as e:
-        st.error(f"Error loading model: {e}")
-        return None
+        st.error(f"Failed to load model: {e}")
+        st.error("Currently using dummy mode fallback")
+        time.sleep(1)
+        return "dummy_model", "dummy_processor"
 
 def preprocess_image(image, processor):
-    """Preprocess image for ViT model"""
-    # Resize to expected size
-    img_height = processor.size["height"]
-    img_width = processor.size["width"]
+    """Preprocess image for ViT model (REAL VERSION)"""
+    if processor == "dummy_processor":
+        # Dummy mode
+        return np.array(image)
+    else:
+        # Real model preprocessing
+        try:
+            inputs = processor(images=image, return_tensors="tf")
+            return inputs
+        except Exception as e:
+            st.error(f"Error preprocessing image: {e}")
+            return None
+
+def predict_personality(processed_inputs, model):
+    """
+    Real prediction function using the trained ViT model
+    Returns: dictionary with personality traits and their percentages
+    """
+    if model == "dummy_model":
+        # Dummy mode FALLBACK ONLY. HAPUS SAAT RILIS
+        time.sleep(2)
+        traits = ["Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism"]
+        raw_values = [random.uniform(0.1, 0.4) for _ in traits]
+        total = sum(raw_values)
+        percentages = [(val / total) for val in raw_values]
+        results = {}
+        for trait, percentage in zip(traits, percentages):
+            results[trait] = percentage
+        return results
     
-    image = image.resize((img_width, img_height))
-    image_array = np.array(image) / 255.0
-    
-    # Handle grayscale images
-    if len(image_array.shape) == 2:
-        image_array = np.stack([image_array] * 3, axis=-1)
-    elif image_array.shape[-1] == 4:  # RGBA
-        image_array = image_array[:, :, :3]  # Remove alpha channel
-    
-    # Transpose to channels first (as done in training)
-    image_array = np.transpose(image_array, (2, 0, 1))
-    image_batch = image_array[np.newaxis, ...]
-    
-    return image_batch
+    else:
+        # ViT model(?) logic
+        try:
+            predictions = model(**processed_inputs)
+            
+            # Convert logits to probabilities using softmax
+            probabilities = tf.nn.softmax(predictions.logits, axis=-1).numpy()
+            
+            # OCEAN traits mapping (ensure this matches your model's output order)
+            ocean_traits = {
+                'Openness': float(probabilities[0][0]),
+                'Conscientiousness': float(probabilities[0][1]),
+                'Extraversion': float(probabilities[0][2]),
+                'Agreeableness': float(probabilities[0][3]),
+                'Neuroticism': float(probabilities[0][4])
+            }
+            
+            return ocean_traits
+            
+        except Exception as e:
+            st.error(f"Error during prediction: {e} \nPlease choose another image or refresh your browser")
+            return None
 
 def main():
-    st.title("🖋️ Handwriting Personality Analysis")
-    st.markdown("Upload a handwriting sample to analyze **Big Five** personality traits using Vision Transformer AI")
+    st.title("🖋️ Handwriting OCEAN Psychology Traits Mapper")
+    st.markdown("Upload your handwriting to analyze **Big Five** personality traits **(DUMMY VIEW. NEED AI MODEL)**")
     
-    # Load model
+    # Load model (dummy)
     model_data = load_model()
     if model_data is None:
         st.stop()
@@ -65,43 +95,88 @@ def main():
     model, processor = model_data
     
     # Personality traits
-    personality_traits = ["Agreeableness", "Conscientiousness", "Extraversion", "Neuroticism", "Openness"]
+    personality_traits = ["Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism"]
     
-    # File uploader
-    uploaded_file = st.file_uploader(
-        "📁 Drop your handwriting image here or click to browse",
-        type=['png', 'jpg', 'jpeg'],
-        help="Upload a clear image of handwriting for best results"
+    # Input method selection
+    st.subheader("Choose Input Method")
+    input_method = st.radio(
+        "How would you like to provide your handwriting sample?",
+        ["Upload Image File", "Webcam input V1"],
+        horizontal=True
     )
     
-    if uploaded_file is not None:
+    uploaded_image = None
+    
+    if input_method == "Upload Image File":
+        # File uploader
+        uploaded_file = st.file_uploader(
+            "insert your handwriting or click to browse",
+            type=['png', 'jpg', 'jpeg'],
+            help="Supported: PNG, JPG, JPEG | Max size: 10MB | Use **clear images** for best results"
+        )
+        
+        if uploaded_file is not None:
+            uploaded_image = Image.open(uploaded_file)
+            
+    elif input_method == "Webcam input V1":
+        # Camera input
+        camera_photo = st.camera_input(
+            "Take a photo of your handwriting",
+            help="Make sure your handwriting is well-lit and clearly visible in the frame"
+        )
+        
+        if camera_photo is not None:
+            uploaded_image = Image.open(camera_photo)
+    
+    # Process the image (regardless of source)
+    if uploaded_image is not None:
         # Display uploaded image
         col1, col2 = st.columns([1, 1])
         
         with col1:
-            image = Image.open(uploaded_file)
-            st.image(image, caption="📝 Your handwriting sample", use_column_width=True)
+            st.image(uploaded_image, caption="**PLEASE MAKE SURE THE IMAGE IS WELL-LIT AND READABLE**", use_container_width=True)
             
             # Image info
-            st.info(f"**Image size:** {image.size[0]} x {image.size[1]} pixels")
+            file_size_mb = 0  # Camera input doesn't have direct file size
+            if input_method == "Upload Image File" and uploaded_file is not None:
+                file_size_mb = len(uploaded_file.getvalue()) / (1024 * 1024)
+                st.info(f"**Image size:** {uploaded_image.size[0]} x {uploaded_image.size[1]} pixels | **File size:** {file_size_mb:.2f}MB")
+            else:
+                st.info(f"**Image size:** {uploaded_image.size[0]} x {uploaded_image.size[1]} pixels | **Source:** Camera")
         
         with col2:
-            if st.button("🔍 Analyze Personality", type="primary", use_container_width=True):
-                with st.spinner("🤖 AI is analyzing your handwriting patterns..."):
+            # Update button text based on model type
+            model, processor = model_data
+            button_text = "RUN VIT MODEL" if model != "dummy_model" else "RUN DUMMY OUTPUT"
+            model_status = "ViT initialized" if model != "dummy_model" else "⚠️ Dummy Mode"
+            
+            st.info(model_status)
+            
+            if st.button(button_text, type="primary", use_container_width=True):
+                with st.spinner("Analyzing your handwriting... Please wait"):
                     try:
                         # Preprocess image
-                        processed_image = preprocess_image(image, processor)
+                        processed_inputs = preprocess_image(uploaded_image, processor)
+                        
+                        if processed_inputs is None:
+                            st.error("Failed to preprocess image")
+                            st.stop()
                         
                         # Make prediction
-                        predictions = model.predict(processed_image, verbose=0)
-                        probabilities = tf.nn.softmax(predictions.logits).numpy()[0]
+                        personality_results = predict_personality(processed_inputs, model)
+                        
+                        if personality_results is None:
+                            st.error("Failed to make prediction")
+                            st.stop()
                         
                         # Display results
-                        st.success("✅ Analysis Complete!")
-                        st.subheader("🎯 Personality Analysis Results")
+                        success_message = "✨ Analysis Complete!" if model != "dummy_model" else "DUMMY Complete!"
+                        st.success(success_message)
+                        st.subheader("Personality Analysis Results")
                         
                         # Create metrics display
-                        for i, (trait, prob) in enumerate(zip(personality_traits, probabilities)):
+                        for trait in personality_traits:
+                            prob = personality_results[trait]
                             col_metric, col_bar = st.columns([1, 2])
                             
                             with col_metric:
@@ -115,36 +190,58 @@ def main():
                                 st.progress(prob)
                         
                         # Dominant trait
-                        dominant_trait_idx = np.argmax(probabilities)
-                        dominant_trait = personality_traits[dominant_trait_idx]
-                        dominant_prob = probabilities[dominant_trait_idx]
+                        dominant_trait = max(personality_results, key=personality_results.get)
+                        dominant_prob = personality_results[dominant_trait]
                         
                         st.success(f"🌟 **Dominant trait:** {dominant_trait} ({dominant_prob:.1%})")
+                        
+                        # Show raw results for debugging
+                        with st.expander("📊 Detailed Results"):
+                            st.json(personality_results)
                         
                     except Exception as e:
                         st.error(f"❌ Error during analysis: {e}")
                         st.error("Please check your image and try again.")
+                        # Optionally show more detailed error info in debug mode
+                        if st.checkbox("Show detailed error info"):
+                            st.exception(e)
     
     # Sidebar with information
     with st.sidebar:
         st.header("ℹ️ About")
         st.markdown("""
-        This app uses a **Vision Transformer (ViT)** model to analyze handwriting 
-        and predict personality traits based on the **Big Five** model:
+        This program uses TensorFlow based **Vision Transformer (ViT)** model to analyze handwriting 
+        and map personality traits based on Warren Norman's **Big Five** model:
         
-        - **Agreeableness**: Compassionate and cooperative
-        - **Conscientiousness**: Organized and disciplined  
-        - **Extraversion**: Outgoing and energetic
-        - **Neuroticism**: Anxious and emotionally reactive
-        - **Openness**: Creative and open to new experiences
+        - **Openness** to new experiences
+        - **Conscientiousness** on discipline and organization  
+        - **Extraversion** towards social situations
+        - **Agreeableness** in relationships
+        - **Neuroticism** towards emotional stability
         """)
         
-        st.header("📋 Tips for Best Results")
+        st.header("📸 Camera Tips")
         st.markdown("""
-        - Use clear, high-quality images
+        **For best camera results:**
+        - Hold your device steady
+        - Ensure good lighting (avoid shadows)
+        - Position handwriting flat and straight
+        - Fill the frame with your writing
+        - Avoid glare or reflections
+        """)
+        
+        st.header("⚠️**PLEASE USE WELL-LIT IMAGES**")
+        st.markdown("""
         - Ensure good lighting and contrast
         - Include multiple words or sentences
-        - Avoid blurry or rotated images
+        - Avoid blurry or rotated images if possible
+        """)
+        
+        st.header("🔧 Changelog")
+        st.success("**V0.10** ViT AI Model integration")
+        st.warning("""
+        **V0.01** Added camera input support
+        **V0.00** Dummy mode with simulated results. AI model yet to be integrated
         """)
 
 if __name__ == "__main__":
