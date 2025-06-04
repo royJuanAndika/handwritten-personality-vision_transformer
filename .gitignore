@@ -1,0 +1,11 @@
+# Dataset version control
+datasets/
+
+
+.env
+.venv
+env/
+venv/
+trained_vit_model_perfect/personality_vit_20250602-223259/tf_model.h5
+/log
+trained_vit_model_perfect/personality_vit_20250602-223259/config.json
