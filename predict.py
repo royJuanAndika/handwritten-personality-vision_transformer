@@ -24,13 +24,14 @@ predicted_class = loaded_model.config.id2label[predicted_class_idx]
 # Convert logits to probabilities
 probabilities = np.exp(predictions.logits) / np.sum(np.exp(predictions.logits))
 
-# OCEAN traits
+# OCEAN traits based on actual model's id2label mapping
+# Order from model config.json: 0:Agreeableness, 1:Conscientiousness, 2:Extraversion, 3:Neuroticism, 4:Openness
 ocean_traits = {
-    'Openness': float(probabilities[0][0]),
+    'Agreeableness': float(probabilities[0][0]),
     'Conscientiousness': float(probabilities[0][1]),
     'Extraversion': float(probabilities[0][2]),
-    'Agreeableness': float(probabilities[0][3]),
-    'Neuroticism': float(probabilities[0][4])
+    'Neuroticism': float(probabilities[0][3]),
+    'Openness': float(probabilities[0][4])
 }
 
 print(ocean_traits)

@@ -21,7 +21,7 @@ def load_model():
         with st.spinner("Loading AI model... This may take a moment."):
             MODEL_NAME = "google/vit-base-patch16-224"
             processor = ViTImageProcessor.from_pretrained(MODEL_NAME)
-            model = TFViTForImageClassification.from_pretrained("personality_vit_20250521-144334")
+            model = TFViTForImageClassification.from_pretrained("../handwritten-personality-vision_transformer copy/personality_vit_20250521-144334")
             return model, processor
     except Exception as e:
         st.error(f"Failed to load model: {e}")
@@ -64,17 +64,17 @@ def predict_personality(processed_inputs, model):
         # ViT model(?) logic
         try:
             predictions = model(**processed_inputs)
-            
-            # Convert logits to probabilities using softmax
+              # Convert logits to probabilities using softmax
             probabilities = tf.nn.softmax(predictions.logits, axis=-1).numpy()
             
-            # OCEAN traits mapping (ensure this matches your model's output order)
+            # OCEAN traits mapping based on actual model's id2label mapping
+            # Order from model config.json: 0:Agreeableness, 1:Conscientiousness, 2:Extraversion, 3:Neuroticism, 4:Openness
             ocean_traits = {
-                'Openness': float(probabilities[0][0]),
+                'Agreeableness': float(probabilities[0][0]),
                 'Conscientiousness': float(probabilities[0][1]),
                 'Extraversion': float(probabilities[0][2]),
-                'Agreeableness': float(probabilities[0][3]),
-                'Neuroticism': float(probabilities[0][4])
+                'Neuroticism': float(probabilities[0][3]),
+                'Openness': float(probabilities[0][4])
             }
             
             return ocean_traits
